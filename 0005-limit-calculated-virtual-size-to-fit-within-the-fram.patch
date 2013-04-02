@@ -1,0 +1,39 @@
+From e9ce3f0ef6088c6485561bd6bdd2b3ca5eb97cd5 Mon Sep 17 00:00:00 2001
+From: Hans de Goede <hdegoede@redhat.com>
+Date: Sun, 10 Oct 2010 13:28:57 +0200
+Subject: [PATCH xf86-video-qxl master 5/6] limit calculated virtual size to fit within the framebuffer
+
+When running inside a vm with a qxl device with a 8MB framebuffer the
+code, for automatically setting the virtualsize to the largest
+width and height seen in the resolution list, would lead to a too
+large virtual size. The 8MB list has both 1920x1080 and 1600x1200
+resolution which lead to a virtualsize of 1920x1200 which does not fit.
+---
+ src/qxl_driver.c |   10 +++++++++-
+ 1 files changed, 9 insertions(+), 1 deletions(-)
+
+diff --git a/src/qxl_driver.c b/src/qxl_driver.c
+index cdf4843..9b89d02 100644
+--- a/src/qxl_driver.c
++++ b/src/qxl_driver.c
+@@ -1361,8 +1361,16 @@ qxl_pre_init(ScrnInfoPtr pScrn, int flags)
+         }
+ 
+     if (pScrn->display->virtualX == 0 && pScrn->display->virtualY == 0) {
++        /* It is possible for the largest x + largest y size combined leading
++           to a virtual size which will not fit into the framebuffer when this
++           happens we prefer max width and make height as large as possible */
++        if (max_x * max_y * (pScrn->bitsPerPixel / 8) > qxl->draw_area_size)
++            pScrn->display->virtualY = qxl->draw_area_size /
++                                       (max_x * (pScrn->bitsPerPixel / 8));
++        else
++            pScrn->display->virtualY = max_y;
++
+     	pScrn->display->virtualX = max_x;
+-    	pScrn->display->virtualY = max_y;
+     }
+ 
+     if (0 >= xf86ValidateModes(pScrn, pScrn->monitor->Modes,
+-- 
+1.7.1
+

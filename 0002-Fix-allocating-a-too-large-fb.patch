@@ -1,0 +1,30 @@
+From c0ae79a8541993072b9d0e20373acca7abf85707 Mon Sep 17 00:00:00 2001
+From: Hans de Goede <hdegoede@redhat.com>
+Date: Thu, 23 Sep 2010 08:19:04 +0200
+Subject: [PATCH xf86-video-qxl master 2/6] Fix allocating a too large fb
+
+We were allocating a fb of max-width * max-width pixels rather then
+max-height * max-width pixels, this patch fixes this.
+---
+ src/qxl_driver.c |    5 ++++-
+ 1 files changed, 4 insertions(+), 1 deletions(-)
+
+diff --git a/src/qxl_driver.c b/src/qxl_driver.c
+index 6f76689..a0c7897 100644
+--- a/src/qxl_driver.c
++++ b/src/qxl_driver.c
+@@ -973,7 +973,10 @@ qxl_screen_init(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
+     if (!miSetPixmapDepths())
+ 	goto out;
+ 
+-    qxl->fb = xcalloc(pScrn->virtualX * pScrn->displayWidth, 4);
++    /* Note we do this before setting pScrn->virtualY to match our current
++       mode, so as to allocate a buffer large enough for the largest mode.
++       FIXME: add support for resizing the framebuffer on modeset. */
++    qxl->fb = xcalloc(pScrn->virtualY * pScrn->displayWidth, 4);
+     if (!qxl->fb)
+ 	goto out;
+ 
+-- 
+1.7.1
+

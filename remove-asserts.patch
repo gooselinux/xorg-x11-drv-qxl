@@ -1,0 +1,23 @@
+commit 951817fe289206b5960aa0cce4ff37c53fb879bf
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Tue Mar 2 11:38:16 2010 -0500
+
+    qxl: Remove a couple of obsolete asserts
+    
+    These asserts cast p->Private to struct qxl_mode *, but you can't do
+    that anymore because p->Private is now an index.
+
+diff --git a/src/qxl_driver.c b/src/qxl_driver.c
+index 25fe59b..c4e5e34 100644
+--- a/src/qxl_driver.c
++++ b/src/qxl_driver.c
+@@ -1230,9 +1230,6 @@ qxl_valid_mode(int scrn, DisplayModePtr p, Bool flag, int pass)
+ 	return MODE_NOMODE;
+ 
+     p->Private = (void *)(unsigned long)mode_idx;
+-
+-    assert (((struct qxl_mode *)p->Private)->x_res == p->HDisplay);
+-    assert (((struct qxl_mode *)p->Private)->y_res == p->VDisplay);
+     
+     return MODE_OK;
+ }

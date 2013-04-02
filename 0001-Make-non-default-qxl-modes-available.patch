@@ -1,0 +1,98 @@
+From f319e6b21380c057537c0c32480c13c9888dfbfa Mon Sep 17 00:00:00 2001
+From: Hans de Goede <hdegoede@redhat.com>
+Date: Thu, 23 Sep 2010 08:00:56 +0200
+Subject: [PATCH xf86-video-qxl master 1/6] Make non default qxl modes available
+
+Currently unless an xorg.conf with modelines is used a lot of the
+qxl supported modes like 1920x1080 are not available, because the xorg
+default modelines set does not have modelines for them.
+
+This patch adds code to dynamically generate modelines for all modes
+in the qxl mode list, bringing the xorg driver up to par with the windows
+driver wrt supported resolutions.
+
+Note that an xorg.conf specifying a large enough virtual screen size is
+still needed for resolutions > 1024x768, but one no longer needs to add
+modelines in it. This is fixed in my next patch.
+---
+ src/qxl_driver.c |   40 +++++++++++++++++++++++++++++++++++++---
+ 1 files changed, 37 insertions(+), 3 deletions(-)
+
+diff --git a/src/qxl_driver.c b/src/qxl_driver.c
+index 36cec6e..6f76689 100644
+--- a/src/qxl_driver.c
++++ b/src/qxl_driver.c
+@@ -1239,10 +1239,38 @@ qxl_valid_mode(int scrn, DisplayModePtr p, Bool flag, int pass)
+     return MODE_OK;
+ }
+ 
++static void qxl_add_mode(ScrnInfoPtr pScrn, int width, int height, int type)
++{
++    DisplayModePtr mode;
++
++    /* Skip already present modes */
++    for (mode = pScrn->monitor->Modes; mode; mode = mode->next)
++        if (mode->HDisplay == width && mode->VDisplay == height)
++            return;
++
++    mode = xnfcalloc(1, sizeof(DisplayModeRec));
++
++    mode->status = MODE_OK;
++    mode->type = type;
++    mode->HDisplay   = width;
++    mode->HSyncStart = (width * 105 / 100 + 7) & ~7;
++    mode->HSyncEnd   = (width * 115 / 100 + 7) & ~7;
++    mode->HTotal     = (width * 130 / 100 + 7) & ~7;
++    mode->VDisplay   = height;
++    mode->VSyncStart = height + 1;
++    mode->VSyncEnd   = height + 4;
++    mode->VTotal     = height * 1035 / 1000;
++    mode->Clock = mode->HTotal * mode->VTotal * 60 / 1000;
++    mode->Flags = V_NHSYNC | V_PVSYNC;
++
++    xf86SetModeDefaultName(mode);
++    xf86ModesAdd(pScrn->monitor->Modes, mode);
++}
++
+ static Bool
+ qxl_pre_init(ScrnInfoPtr pScrn, int flags)
+ {
+-    int scrnIndex = pScrn->scrnIndex;
++    int i, scrnIndex = pScrn->scrnIndex;
+     qxl_screen_t *qxl = NULL;
+     ClockRangePtr clockRanges = NULL;
+     int *linePitches = NULL;
+@@ -1284,7 +1312,7 @@ qxl_pre_init(ScrnInfoPtr pScrn, int flags)
+     clockRanges = xnfcalloc(sizeof(ClockRange), 1);
+     clockRanges->next = NULL;
+     clockRanges->minClock = 10000;
+-    clockRanges->maxClock = 165000;
++    clockRanges->maxClock = 175000;
+     clockRanges->clockIndex = -1;
+     clockRanges->interlaceAllowed = clockRanges->doubleScanAllowed = 0;
+     clockRanges->ClockMulFactor = clockRanges->ClockDivFactor = 1;
+@@ -1292,7 +1320,7 @@ qxl_pre_init(ScrnInfoPtr pScrn, int flags)
+ 
+     /* override QXL monitor stuff */
+     if (pScrn->monitor->nHsync <= 0) {
+-	pScrn->monitor->hsync[0].lo = 31.5;
++	pScrn->monitor->hsync[0].lo = 29.0;
+ 	pScrn->monitor->hsync[0].hi = 80.0;
+ 	pScrn->monitor->nHsync = 1;
+     }
+@@ -1307,6 +1335,12 @@ qxl_pre_init(ScrnInfoPtr pScrn, int flags)
+     	pScrn->display->virtualY = 768;
+     }
+ 
++    /* Add any modes not in xorg's default mode list */
++    for (i = 0; i < qxl->num_modes; i++)
++        if (qxl->modes[i].orientation == 0)
++            qxl_add_mode(pScrn, qxl->modes[i].x_res, qxl->modes[i].y_res,
++                         M_T_DRIVER);
++
+     if (0 >= xf86ValidateModes(pScrn, pScrn->monitor->Modes,
+ 			       pScrn->display->modes, clockRanges, linePitches,
+ 			       128, 2048, 128 * 4, 128, 2048,
+-- 
+1.7.1
+

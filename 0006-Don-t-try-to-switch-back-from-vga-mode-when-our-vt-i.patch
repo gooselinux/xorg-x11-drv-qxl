@@ -1,0 +1,30 @@
+From dfd59751bd9e829ba91cd60ce3d3b4fdad778851 Mon Sep 17 00:00:00 2001
+From: Hans de Goede <hdegoede@redhat.com>
+Date: Sun, 10 Oct 2010 13:38:25 +0200
+Subject: [PATCH xf86-video-qxl master 6/6] Don't try to switch back from vga mode when our vt is not focussed (v2)
+
+Trying to do so causes the X-server to segfault, which is, erm, undesirable :)
+
+Changes in version 2:
+-Use pScrn->vtSema rather then tracking the state ourselves
+---
+ src/qxl_driver.c |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/src/qxl_driver.c b/src/qxl_driver.c
+index 9b89d02..aa16503 100644
+--- a/src/qxl_driver.c
++++ b/src/qxl_driver.c
+@@ -583,6 +583,9 @@ qxl_block_handler (pointer data, OSTimePtr pTimeout, pointer pRead)
+ {
+     qxl_screen_t *qxl = (qxl_screen_t *) data;
+ 
++    if (!qxl->pScrn->vtSema)
++        return;
++
+     qxl_sanity_check(qxl);
+ 
+     accept_damage (qxl);
+-- 
+1.7.1
+

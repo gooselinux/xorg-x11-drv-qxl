@@ -1,0 +1,137 @@
+From d48ff90528c48a960170eab922229fc2b81a2bb0 Mon Sep 17 00:00:00 2001
+From: Hans de Goede <hdegoede@redhat.com>
+Date: Thu, 23 Sep 2010 10:13:51 +0200
+Subject: [PATCH xf86-video-qxl master 3/6] Fix restoration of text mode font when leaving the vt (rhbz#633647)
+
+---
+ src/qxl.h        |    2 ++
+ src/qxl_driver.c |   43 +++++++++++++++++++++++++++++++------------
+ 2 files changed, 33 insertions(+), 12 deletions(-)
+
+diff --git a/src/qxl.h b/src/qxl.h
+index 73b3bc2..17fa5b4 100644
+--- a/src/qxl.h
++++ b/src/qxl.h
+@@ -39,6 +39,7 @@
+ #include "pciaccess.h"
+ #endif
+ #include "fb.h"
++#include "vgaHW.h"
+ 
+ #define hidden _X_HIDDEN
+ 
+@@ -505,6 +506,7 @@ struct _qxl_screen_t
+     pciVideoPtr			pci;
+     PCITAG			pci_tag;
+ #endif
++    vgaRegRec                   vgaRegs;
+ 
+     CreateScreenResourcesProcPtr create_screen_resources;
+     CloseScreenProcPtr		close_screen;
+diff --git a/src/qxl_driver.c b/src/qxl_driver.c
+index a0c7897..2e90f1e 100644
+--- a/src/qxl_driver.c
++++ b/src/qxl_driver.c
+@@ -36,9 +36,6 @@
+ #include "qxl.h"
+ #include "assert.h"
+ 
+-#define qxl_save_state(x) do { (void)x; } while (0)
+-#define qxl_restore_state(x) do { (void)x; } while (0)
+-
+ #if 0
+ #define CHECK_POINT() ErrorF ("%s: %d  (%s)\n", __FILE__, __LINE__, __FUNCTION__);
+ #endif
+@@ -249,14 +246,32 @@ qxl_map_memory(qxl_screen_t *qxl, int scrnIndex)
+     return TRUE;
+ }
+ 
++static void
++qxl_save_state(ScrnInfoPtr pScrn)
++{
++    qxl_screen_t *qxl = pScrn->driverPrivate;
++
++    vgaHWSaveFonts(pScrn, &qxl->vgaRegs);
++}
++
++static void
++qxl_restore_state(ScrnInfoPtr pScrn)
++{
++    qxl_screen_t *qxl = pScrn->driverPrivate;
++
++    vgaHWRestoreFonts(pScrn, &qxl->vgaRegs);
++}
++
+ static Bool
+ qxl_close_screen(int scrnIndex, ScreenPtr pScreen)
+ {
+     ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+     qxl_screen_t *qxl = pScrn->driverPrivate;
+ 
+-    if (pScrn->vtSema)
++    if (pScrn->vtSema) {
++        qxl_restore_state(pScrn);
+ 	qxl_unmap_memory(qxl, scrnIndex);
++    }
+     pScrn->vtSema = FALSE;
+ 
+     xfree(qxl->fb);
+@@ -962,8 +977,8 @@ qxl_screen_init(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
+ 
+     rom = qxl->rom;
+     ram_header = (void *)((unsigned long)qxl->ram + (unsigned long)qxl->rom->ram_header_offset);
+-    
+-    qxl_save_state(qxl);
++
++    qxl_save_state(pScrn);
+     qxl_blank_screen(pScreen, SCREEN_SAVER_ON);
+     
+     miClearVisualTypes();
+@@ -1074,20 +1089,19 @@ static Bool
+ qxl_enter_vt(int scrnIndex, int flags)
+ {
+     ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+-    qxl_screen_t *qxl = pScrn->driverPrivate;
+-
+-    qxl_save_state(qxl);
+ 
++    qxl_save_state(pScrn);
+     qxl_switch_mode(scrnIndex, pScrn->currentMode, 0);
++
+     return TRUE;
+ }
+ 
+ static void
+ qxl_leave_vt(int scrnIndex, int flags)
+ {
+-    qxl_screen_t *qxl = xf86Screens[scrnIndex]->driverPrivate;
++    ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+ 
+-    qxl_restore_state(qxl);
++    qxl_restore_state(pScrn);
+ }
+ 
+ static Bool
+@@ -1360,13 +1374,18 @@ qxl_pre_init(ScrnInfoPtr pScrn, int flags)
+     xf86SetDpi(pScrn, 0, 0);
+ 
+     if (!xf86LoadSubModule(pScrn, "fb") ||
+-	!xf86LoadSubModule(pScrn, "ramdac"))
++	!xf86LoadSubModule(pScrn, "ramdac") ||
++	!xf86LoadSubModule(pScrn, "vgahw"))
+     {
+ 	goto out;
+     }
+ 
+     print_modes (qxl, scrnIndex);
+ 
++    /* VGA hardware initialisation */
++    if (!vgaHWGetHWRec(pScrn))
++        return FALSE;
++
+     /* hate */
+     qxl_unmap_memory(qxl, scrnIndex);
+ 
+-- 
+1.7.1
+
